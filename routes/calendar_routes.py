@@ -498,61 +498,155 @@ def _expand_rrule(
 
 # ── Routes ──
 
+async def _propfind_test(url: str, user: str, pw: str) -> dict:
+    """PROPFIND handshake against a CalDAV URL. Shared by /test and /accounts/{id}/test."""
+    import httpx
+    propfind_body = (
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/>'
+        '</d:prop></d:propfind>'
+    )
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as cx:
+            r = await cx.request(
+                "PROPFIND", url,
+                auth=(user, pw),
+                headers={"Depth": "0", "Content-Type": "application/xml"},
+                content=propfind_body,
+            )
+        if r.status_code in (200, 207):
+            return {"ok": True}
+        if r.status_code == 401:
+            return {"ok": False, "error": "Auth failed — check username/password"}
+        if r.status_code == 403:
+            return {"ok": False, "error": "Forbidden — user can't access that URL"}
+        if r.status_code == 404:
+            return {"ok": False, "error": "Not found — check the URL path"}
+        return {"ok": False, "error": f"HTTP {r.status_code}"}
+    except httpx.ConnectError as e:
+        return {"ok": False, "error": f"Connection refused: {e}"[:200]}
+    except httpx.TimeoutException:
+        return {"ok": False, "error": "Connection timed out"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:200]}
+
+
 def setup_calendar_routes() -> APIRouter:
     router = APIRouter(prefix="/api/calendar", tags=["calendar"])
 
-    # CalDAV connect form (Integrations → Calendar). Storage is local
-    # SQLite; sync (src/caldav_sync.py) pulls remote events into it on
-    # calendar open and periodically via the scheduler.
-    @router.get("/config")
-    async def get_config(request: Request):
-        owner = _require_user(request)
-        from routes.prefs_routes import _load_for_user
-        cfg = (_load_for_user(owner) or {}).get("caldav", {}) or {}
-        # Surface url+username but never hand the password back to the
-        # client — saved-state UI shouldn't leak the credential.
-        return {
-            "url": cfg.get("url", "") or "",
-            "username": cfg.get("username", "") or "",
-            "password": "",
-            "has_password": bool(cfg.get("password")),
-            "local": not bool(cfg.get("url")),
-        }
+    # ── CalDAV multi-account endpoints ──────────────────────────────────
 
-    @router.post("/config")
-    async def save_config(request: Request):
+    @router.get("/accounts")
+    async def list_accounts(request: Request):
         owner = _require_user(request)
-        from routes.prefs_routes import _load_for_user, _save_for_user
+        from routes.prefs_routes import _load_caldav_accounts
+        accounts = _load_caldav_accounts(owner)
+        safe = [
+            {
+                "id": a.get("id"),
+                "name": a.get("name", ""),
+                "url": a.get("url", ""),
+                "username": a.get("username", ""),
+                "has_password": bool(a.get("password")),
+            }
+            for a in accounts
+        ]
+        return {"accounts": safe}
+
+    @router.post("/accounts")
+    async def create_account(request: Request):
+        owner = _require_user(request)
+        from routes.prefs_routes import _load_caldav_accounts, _save_caldav_accounts
         try:
             body = await request.json()
         except Exception:
             body = {}
-        prefs = _load_for_user(owner) or {}
-        cfg = dict(prefs.get("caldav") or {})
-        # Empty url => clear the whole entry (treat as "remove integration").
-        if not (body.get("url") or "").strip():
-            prefs.pop("caldav", None)
-            _save_for_user(owner, prefs)
-            return {"ok": True, "cleared": True}
-        cfg["url"] = body.get("url", "").strip()
-        cfg["username"] = (body.get("username") or "").strip()
-        # Preserve the stored password when the client sends an empty
-        # one (edit form re-submitted without re-typing the password).
+        url = (body.get("url") or "").strip()
+        username = (body.get("username") or "").strip()
+        password = body.get("password") or ""
+        name = (body.get("name") or "").strip() or "CalDAV"
+        if not (url and username and password):
+            raise HTTPException(status_code=400, detail="url, username, and password are required")
+        account_id = str(uuid.uuid4())
+        accounts = _load_caldav_accounts(owner)
+        accounts.append({"id": account_id, "name": name, "url": url,
+                         "username": username, "password": password})
+        _save_caldav_accounts(owner, accounts)
+        return {"ok": True, "id": account_id}
+
+    @router.put("/accounts/{account_id}")
+    async def update_account(request: Request, account_id: str):
+        owner = _require_user(request)
+        from routes.prefs_routes import _load_caldav_accounts, _save_caldav_accounts
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        accounts = _load_caldav_accounts(owner)
+        acc = next((a for a in accounts if a.get("id") == account_id), None)
+        if not acc:
+            raise HTTPException(status_code=404, detail="Account not found")
+        if body.get("name") is not None:
+            acc["name"] = body["name"]
+        if body.get("url"):
+            acc["url"] = body["url"].strip()
+        if body.get("username") is not None:
+            acc["username"] = body["username"].strip()
         if body.get("password"):
-            cfg["password"] = body["password"]
-        prefs["caldav"] = cfg
-        _save_for_user(owner, prefs)
+            acc["password"] = body["password"]
+        _save_caldav_accounts(owner, accounts)
         return {"ok": True}
+
+    @router.delete("/accounts/{account_id}")
+    async def delete_account(request: Request, account_id: str):
+        owner = _require_user(request)
+        from routes.prefs_routes import _load_caldav_accounts, _save_caldav_accounts
+        accounts = _load_caldav_accounts(owner)
+        if not any(a.get("id") == account_id for a in accounts):
+            raise HTTPException(status_code=404, detail="Account not found")
+        _save_caldav_accounts(owner, [a for a in accounts if a.get("id") != account_id])
+        db = SessionLocal()
+        try:
+            cal_ids = [
+                c.id for c in db.query(CalendarCal).filter(
+                    CalendarCal.owner == owner,
+                    CalendarCal.account_id == account_id,
+                ).all()
+            ]
+            for cid in cal_ids:
+                db.query(CalendarEvent).filter(CalendarEvent.calendar_id == cid).delete()
+            if cal_ids:
+                db.query(CalendarCal).filter(CalendarCal.id.in_(cal_ids)).delete()
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.error("Failed to clean up CalDAV account calendars: %s", e)
+        finally:
+            db.close()
+        return {"ok": True}
+
+    @router.post("/accounts/{account_id}/test")
+    async def test_account(request: Request, account_id: str):
+        owner = _require_user(request)
+        from routes.prefs_routes import _load_caldav_accounts
+        accounts = _load_caldav_accounts(owner)
+        acc = next((a for a in accounts if a.get("id") == account_id), None)
+        if not acc:
+            raise HTTPException(status_code=404, detail="Account not found")
+        return await _propfind_test(acc.get("url", ""), acc.get("username", ""), acc.get("password", ""))
+
+    @router.post("/accounts/{account_id}/sync")
+    async def sync_account_endpoint(request: Request, account_id: str):
+        owner = _require_user(request)
+        from src.caldav_sync import sync_caldav_account
+        return await sync_caldav_account(owner, account_id)
 
     @router.post("/test")
     async def test_connection(request: Request):
-        """Actually probe the configured CalDAV server with a PROPFIND
-        request (the same handshake every CalDAV client uses). Accepts
-        an optional {url, username, password} body so the user can test
-        a configuration BEFORE saving it; falls back to the stored
-        creds otherwise. Returns {ok, error?} with a useful message on
-        failure (status code, auth issue, network error)."""
-        owner = _require_user(request)
+        """Probe a CalDAV server with a PROPFIND before saving credentials.
+        Accepts {url, username, password} in the body (inline creds).
+        Returns {ok, error?}."""
+        _require_user(request)
         try:
             body = await request.json()
         except Exception:
@@ -561,45 +655,8 @@ def setup_calendar_routes() -> APIRouter:
         user = (body.get("username") or "").strip()
         pw = body.get("password") or ""
         if not (url and user and pw):
-            # Fall back to saved settings for this user.
-            from routes.prefs_routes import _load_for_user
-            cfg = (_load_for_user(owner) or {}).get("caldav", {}) or {}
-            url = url or (cfg.get("url") or "")
-            user = user or (cfg.get("username") or "")
-            pw = pw or (cfg.get("password") or "")
-        if not (url and user and pw):
             return {"ok": False, "error": "Missing URL, username, or password"}
-        import httpx
-        propfind_body = (
-            '<?xml version="1.0" encoding="UTF-8"?>\n'
-            '<d:propfind xmlns:d="DAV:"><d:prop><d:resourcetype/>'
-            '</d:prop></d:propfind>'
-        )
-        try:
-            async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as cx:
-                r = await cx.request(
-                    "PROPFIND", url,
-                    auth=(user, pw),
-                    headers={"Depth": "0", "Content-Type": "application/xml"},
-                    content=propfind_body,
-                )
-            # 207 = Multi-Status — standard CalDAV success. 200 also
-            # acceptable. Anything else (401/403/404/5xx) means trouble.
-            if r.status_code in (200, 207):
-                return {"ok": True}
-            if r.status_code == 401:
-                return {"ok": False, "error": "Auth failed — check username/password"}
-            if r.status_code == 403:
-                return {"ok": False, "error": "Forbidden — user can't access that URL"}
-            if r.status_code == 404:
-                return {"ok": False, "error": "Not found — check the URL path"}
-            return {"ok": False, "error": f"HTTP {r.status_code}"}
-        except httpx.ConnectError as e:
-            return {"ok": False, "error": f"Connection refused: {e}"[:200]}
-        except httpx.TimeoutException:
-            return {"ok": False, "error": "Connection timed out"}
-        except Exception as e:
-            return {"ok": False, "error": str(e)[:200]}
+        return await _propfind_test(url, user, pw)
 
     @router.post("/sync")
     async def sync_caldav_endpoint(request: Request):

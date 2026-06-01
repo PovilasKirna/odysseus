@@ -56,7 +56,7 @@ def _to_utc_naive(dt):
     return datetime(dt.year, dt.month, dt.day), True
 
 
-def _sync_blocking(owner: str, url: str, username: str, password: str) -> dict:
+def _sync_blocking(owner: str, url: str, username: str, password: str, account_id: str = "") -> dict:
     """The actual sync — synchronous, intended to run in a threadpool.
     Returns counts: {calendars, events, deleted, errors}."""
     # Lazy imports so a missing `caldav` dep doesn't break app startup —
@@ -116,14 +116,19 @@ def _sync_blocking(owner: str, url: str, username: str, password: str) -> dict:
                         name=display_name,
                         color="#5b8abf",
                         source="caldav",
+                        account_id=account_id or None,
                     )
                     db.add(local_cal)
                     db.commit()
                 else:
-                    # Refresh the display name if the user renamed it
-                    # remotely; preserve any local color override.
+                    changed = False
                     if local_cal.name != display_name:
                         local_cal.name = display_name
+                        changed = True
+                    if account_id and local_cal.account_id != account_id:
+                        local_cal.account_id = account_id
+                        changed = True
+                    if changed:
                         db.commit()
                 result["calendars"] += 1
 
@@ -241,22 +246,51 @@ def _sync_blocking(owner: str, url: str, username: str, password: str) -> dict:
 
 
 async def sync_caldav(owner: str) -> dict:
-    """Pull CalDAV state into local DB for `owner`. Returns counts +
-    errors. Loads credentials from the user's prefs; no-ops with a
-    clear error if CalDAV isn't configured."""
-    from routes.prefs_routes import _load_for_user
+    """Pull CalDAV state for all configured accounts for `owner`."""
+    from routes.prefs_routes import _load_caldav_accounts
 
-    cfg = (_load_for_user(owner) or {}).get("caldav", {}) or {}
-    url = (cfg.get("url") or "").strip()
-    user = (cfg.get("username") or "").strip()
-    pw = cfg.get("password") or ""
+    accounts = _load_caldav_accounts(owner)
+    if not accounts:
+        return {"calendars": 0, "events": 0, "deleted": 0,
+                "errors": ["No CalDAV accounts configured"]}
+    totals: dict = {"calendars": 0, "events": 0, "deleted": 0, "errors": []}
+    for acc in accounts:
+        url = (acc.get("url") or "").strip()
+        user = (acc.get("username") or "").strip()
+        pw = acc.get("password") or ""
+        account_id = acc.get("id") or ""
+        if not (url and user and pw):
+            totals["errors"].append(
+                f"Account '{acc.get('name', account_id)}': missing credentials"
+            )
+            continue
+        try:
+            r = await asyncio.to_thread(_sync_blocking, owner, url, user, pw, account_id)
+            for k in ("calendars", "events", "deleted"):
+                totals[k] += r.get(k, 0)
+            totals["errors"].extend(r.get("errors", []))
+        except Exception as e:
+            logger.exception("CalDAV sync raised for account %s", account_id)
+            totals["errors"].append(str(e)[:200])
+    return totals
+
+
+async def sync_caldav_account(owner: str, account_id: str) -> dict:
+    """Sync a single CalDAV account by id."""
+    from routes.prefs_routes import _load_caldav_accounts
+
+    accounts = _load_caldav_accounts(owner)
+    acc = next((a for a in accounts if a.get("id") == account_id), None)
+    if not acc:
+        return {"calendars": 0, "events": 0, "deleted": 0,
+                "errors": [f"Account {account_id!r} not found"]}
+    url = (acc.get("url") or "").strip()
+    user = (acc.get("username") or "").strip()
+    pw = acc.get("password") or ""
     if not (url and user and pw):
-        return {
-            "calendars": 0, "events": 0, "deleted": 0,
-            "errors": ["CalDAV is not configured"],
-        }
+        return {"calendars": 0, "events": 0, "deleted": 0, "errors": ["Missing credentials"]}
     try:
-        return await asyncio.to_thread(_sync_blocking, owner, url, user, pw)
+        return await asyncio.to_thread(_sync_blocking, owner, url, user, pw, account_id)
     except Exception as e:
-        logger.exception("CalDAV sync raised")
+        logger.exception("CalDAV sync raised for account %s", account_id)
         return {"calendars": 0, "events": 0, "deleted": 0, "errors": [str(e)[:200]]}

@@ -1365,11 +1365,12 @@ class CalendarCal(TimestampMixin, Base):
     """A calendar (e.g. 'Personal', 'TimeTree')."""
     __tablename__ = "calendars"
 
-    id    = Column(String, primary_key=True, index=True)
-    owner = Column(String, nullable=True, index=True)
-    name  = Column(String, nullable=False)
-    color = Column(String, default="#5b8abf")
-    source = Column(String, default="local")  # "local" or "timetree"
+    id         = Column(String, primary_key=True, index=True)
+    owner      = Column(String, nullable=True, index=True)
+    name       = Column(String, nullable=False)
+    color      = Column(String, default="#5b8abf")
+    source     = Column(String, default="local")  # "local" or "timetree"
+    account_id = Column(String, nullable=True, index=True)
 
     events = relationship("CalendarEvent", back_populates="calendar", cascade="all, delete-orphan")
 
@@ -1520,6 +1521,7 @@ def init_db():
     _migrate_seed_email_account()
     _migrate_add_calendar_metadata()
     _migrate_add_calendar_is_utc()
+    _migrate_add_caldav_account_id()
     _migrate_encrypt_email_passwords()
     _migrate_encrypt_signatures()
     _migrate_encrypt_endpoint_keys()
@@ -1634,6 +1636,27 @@ def _migrate_add_calendar_is_utc():
         conn.close()
     except Exception as e:
         logging.getLogger(__name__).warning(f"is_utc migration failed: {e}")
+
+
+def _migrate_add_caldav_account_id():
+    """Add account_id to the calendars table for multi-account CalDAV tracking."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    try:
+        conn = sqlite3.connect(db_path)
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(calendars)").fetchall()]
+        if cols and "account_id" not in cols:
+            conn.execute("ALTER TABLE calendars ADD COLUMN account_id VARCHAR")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS ix_calendars_account_id ON calendars(account_id)"
+            )
+            conn.commit()
+            logging.getLogger(__name__).info("Migrated: added 'account_id' column to calendars")
+        conn.close()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"caldav account_id migration failed: {e}")
 
 
 def _migrate_add_calendar_metadata():

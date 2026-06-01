@@ -1,6 +1,7 @@
 """User preferences API — per-user key/value store backed by a JSON file."""
 import json
 import os
+import uuid as _uuid
 from typing import Optional
 from fastapi import APIRouter, Request
 from src.auth_helpers import get_current_user
@@ -47,6 +48,38 @@ def _save_for_user(user: Optional[str], prefs: dict):
         all_prefs = {"_users": {}}
     all_prefs["_users"][user] = prefs
     _save(all_prefs)
+
+
+def _migrate_caldav_prefs(prefs: dict) -> dict:
+    """Convert legacy single caldav key → caldav_accounts list. Pure function."""
+    if "caldav_accounts" in prefs or "caldav" not in prefs:
+        return prefs
+    old = prefs.get("caldav") or {}
+    new_prefs = {**prefs}
+    new_prefs.pop("caldav", None)
+    new_prefs["caldav_accounts"] = (
+        [{"id": str(_uuid.uuid4()), "name": "CalDAV", **old}] if old.get("url") else []
+    )
+    return new_prefs
+
+
+def _load_caldav_accounts(owner: Optional[str] = None) -> list:
+    """Return caldav_accounts list, running lazy migration if needed."""
+    try:
+        prefs = _load_for_user(owner) or {}
+        if "caldav" in prefs and "caldav_accounts" not in prefs:
+            prefs = _migrate_caldav_prefs(prefs)
+            _save_for_user(owner, prefs)
+        return list(prefs.get("caldav_accounts") or [])
+    except Exception:
+        return []
+
+
+def _save_caldav_accounts(owner: Optional[str], accounts: list) -> None:
+    prefs = _load_for_user(owner) or {}
+    prefs.pop("caldav", None)
+    prefs["caldav_accounts"] = accounts
+    _save_for_user(owner, prefs)
 
 
 def setup_prefs_routes():

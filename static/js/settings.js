@@ -3037,9 +3037,9 @@ async function initUnifiedIntegrations() {
   }
 
   async function fetchAll() {
-    const [apiRes, calRes, cardRes, contactsRes, emailAccountsRes, mcpRes, vaultRes] = await Promise.all([
+    const [apiRes, calAccountsRes, cardRes, contactsRes, emailAccountsRes, mcpRes, vaultRes] = await Promise.all([
       fetch('/api/auth/integrations', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : { integrations: [] }).catch(() => ({ integrations: [] })),
-      fetch('/api/calendar/config', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
+      fetch('/api/calendar/accounts', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : { accounts: [] }).catch(() => ({ accounts: [] })),
       fetch('/api/contacts/config', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : {}).catch(() => ({})),
       fetch('/api/contacts/list', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : { contacts: [], count: 0 }).catch(() => ({ contacts: [], count: 0 })),
       fetch('/api/email/accounts', { credentials: 'same-origin' }).then(r => r.ok ? r.json() : { accounts: [] }).catch(() => ({ accounts: [] })),
@@ -3051,9 +3051,9 @@ async function initUnifiedIntegrations() {
     for (const intg of (apiRes.integrations || [])) {
       items.push({ type: 'api', id: intg.id, name: intg.name || 'Unnamed', detail: intg.base_url || '', enabled: intg.enabled !== false, data: intg });
     }
-    // CalDAV
-    if (calRes.url) {
-      items.push({ type: 'caldav', id: '__caldav__', name: 'Calendar (CalDAV)', detail: calRes.url, enabled: true, data: calRes });
+    // CalDAV — one card per account
+    for (const acc of (calAccountsRes.accounts || [])) {
+      items.push({ type: 'caldav', id: acc.id, name: acc.name || 'CalDAV', detail: acc.url, enabled: true, data: acc });
     }
     // Contacts import first, then the optional CardDAV sync account.
     const contactCount = Number(contactsRes.count || (contactsRes.contacts || []).length || 0);
@@ -3151,7 +3151,7 @@ async function initUnifiedIntegrations() {
         const id = btn.dataset.intgId;
         try {
           if (type === 'api') await fetch(`/api/auth/integrations/${id}`, { method: 'DELETE', credentials: 'same-origin' });
-          else if (type === 'caldav') await fetch('/api/calendar/config', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: '', username: '', password: '' }) });
+          else if (type === 'caldav') await fetch(`/api/calendar/accounts/${id}`, { method: 'DELETE', credentials: 'same-origin' });
           else if (type === 'contacts') {
             await fetch('/api/contacts/clear', { method: 'DELETE', credentials: 'same-origin' });
           }
@@ -3172,7 +3172,7 @@ async function initUnifiedIntegrations() {
   function showForm(type, editId) {
     formEl.style.display = '';
     if (type === 'api') showApiForm(editId);
-    else if (type === 'caldav') showCalDavForm();
+    else if (type === 'caldav') showCalDavForm(editId);
     else if (type === 'contacts' || type === 'carddav') showCardDavForm();
     else if (type === 'email') showEmailForm(editId);
     else if (type === 'mcp') showMcpForm(editId);
@@ -3290,26 +3290,54 @@ async function initUnifiedIntegrations() {
   }
 
   // ── CalDAV form ──
-  async function showCalDavForm() {
+  const CALDAV_PROVIDERS = {
+    icloud:    { label: 'iCloud',     url: 'https://caldav.icloud.com/' },
+    google:    { label: 'Google',     url: 'https://www.google.com/calendar/dav/' },
+    fastmail:  { label: 'Fastmail',   url: 'https://caldav.fastmail.com/dav/' },
+    radicale:  { label: 'Radicale',   url: 'http://localhost:5232/' },
+    nextcloud: { label: 'Nextcloud',  url: '' },
+    custom:    { label: 'Custom',     url: '' },
+  };
+
+  async function showCalDavForm(editId) {
+    const isEdit = !!(editId && editId !== 'new');
+    let existing = null;
+    if (isEdit) {
+      try {
+        const r = await fetch('/api/calendar/accounts', { credentials: 'same-origin' });
+        const d = await r.json();
+        existing = (d.accounts || []).find(a => a.id === editId) || null;
+      } catch (_) {}
+    }
+    const a = existing || {};
+    const providerOpts = Object.entries(CALDAV_PROVIDERS)
+      .map(([k, p]) => `<option value="${k}">${esc(p.label)}</option>`)
+      .join('');
     formEl.innerHTML = `
       <div class="admin-card" style="margin-top:8px">
-        <h2 style="font-size:13px">Calendar (CalDAV)</h2>
+        <h2 style="font-size:13px">${isEdit ? 'Edit' : 'Add'} Calendar (CalDAV)</h2>
         <div class="settings-col">
-          <div class="settings-row"><label class="settings-label">Server URL</label><input id="uf-caldav-url" class="settings-input" placeholder="http://localhost:5232/user"></div>
+          <div class="settings-row"><label class="settings-label">Name</label><input id="uf-caldav-name" class="settings-input" placeholder="iCloud, Work, etc."></div>
+          <div class="settings-row"><label class="settings-label">Provider</label><select id="uf-caldav-provider" class="settings-select">${providerOpts}</select></div>
+          <div class="settings-row"><label class="settings-label">Server URL</label><input id="uf-caldav-url" class="settings-input" placeholder="https://caldav.icloud.com/"></div>
           <div class="settings-row"><label class="settings-label">Username</label><input id="uf-caldav-user" class="settings-input"></div>
-          <div class="settings-row"><label class="settings-label">Password</label><input id="uf-caldav-pass" class="settings-input" type="password"></div>
+          <div class="settings-row"><label class="settings-label">Password</label><input id="uf-caldav-pass" class="settings-input" type="password" placeholder="${isEdit ? '(unchanged)' : ''}"></div>
           <div class="settings-row" style="margin-top:4px"><button class="admin-btn-sm" id="uf-caldav-save">Save</button><button class="admin-btn-sm" id="uf-caldav-test" style="opacity:0.7">Test</button><button class="admin-btn-sm" id="uf-caldav-cancel" style="opacity:0.7">Cancel</button><span id="uf-caldav-msg" style="font-size:11px"></span></div>
         </div>
       </div>`;
-    try {
-      const r = await fetch('/api/calendar/config', { credentials: 'same-origin' }); const d = await r.json();
-      el('uf-caldav-url').value = d.url || ''; el('uf-caldav-user').value = d.username || '';
-    } catch (_) {}
+    // Pre-populate for edit
+    if (isEdit && existing) {
+      el('uf-caldav-name').value = existing.name || '';
+      el('uf-caldav-url').value = existing.url || '';
+      el('uf-caldav-user').value = existing.username || '';
+    }
+    // Provider preset wires URL on select
+    el('uf-caldav-provider').addEventListener('change', () => {
+      const p = CALDAV_PROVIDERS[el('uf-caldav-provider').value];
+      if (p && p.url) el('uf-caldav-url').value = p.url;
+    });
     el('uf-caldav-cancel').addEventListener('click', () => { formEl.style.display = 'none'; });
 
-    // Run a PROPFIND with the form's current url+user+pass. Used by
-    // both the Test button (visible result only) and by Save (refuse
-    // to persist a broken config). Returns the parsed {ok, error?}.
     const _runCalDavTest = async () => {
       const body = {
         url: el('uf-caldav-url').value.trim(),
@@ -3334,27 +3362,27 @@ async function initUnifiedIntegrations() {
     };
 
     el('uf-caldav-save').addEventListener('click', async () => {
-      // Pre-validate by hitting the server with the same PROPFIND the
-      // Test button uses. If the CalDAV server rejects the creds/URL
-      // we won't persist garbage — the user gets the actual error
-      // (HTTP 401, "Not found", "Connection refused", etc.) in red.
-      _setCalDavMsg('Testing…', true);
-      el('uf-caldav-msg').style.color = '';
-      const d = await _runCalDavTest();
-      if (!d.ok) {
-        _setCalDavMsg(d.error || 'Connection failed — not saved', false);
-        return;
+      const pw = el('uf-caldav-pass').value;
+      // For new accounts, a password is required. For edits, it's optional (preserves existing).
+      if (!isEdit && !pw) { _setCalDavMsg('Password is required', false); return; }
+      if (pw) {
+        // Only run the PROPFIND test when a password is provided (new account or re-entering).
+        _setCalDavMsg('Testing…', true);
+        el('uf-caldav-msg').style.color = '';
+        const d = await _runCalDavTest();
+        if (!d.ok) { _setCalDavMsg(d.error || 'Connection failed — not saved', false); return; }
       }
       try {
-        await fetch('/api/calendar/config', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: el('uf-caldav-url').value,
-            username: el('uf-caldav-user').value,
-            password: el('uf-caldav-pass').value,
-          }),
-        });
+        const body = {
+          name: el('uf-caldav-name').value.trim() || 'CalDAV',
+          url: el('uf-caldav-url').value.trim(),
+          username: el('uf-caldav-user').value.trim(),
+        };
+        if (pw) body.password = pw;
+        const url = isEdit ? `/api/calendar/accounts/${editId}` : '/api/calendar/accounts';
+        const method = isEdit ? 'PUT' : 'POST';
+        const r = await fetch(url, { method, credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!r.ok) { const e = await r.json().catch(() => ({})); _setCalDavMsg(e.detail || 'Save failed', false); return; }
         _setCalDavMsg('Saved', true);
         formEl.style.display = 'none';
         await renderList();
