@@ -3291,12 +3291,11 @@ async function initUnifiedIntegrations() {
 
   // ── CalDAV form ──
   const CALDAV_PROVIDERS = {
-    icloud:    { label: 'iCloud',     url: 'https://caldav.icloud.com/' },
-    google:    { label: 'Google',     url: 'https://www.google.com/calendar/dav/' },
-    fastmail:  { label: 'Fastmail',   url: 'https://caldav.fastmail.com/dav/' },
-    radicale:  { label: 'Radicale',   url: 'http://localhost:5232/' },
-    nextcloud: { label: 'Nextcloud',  url: '' },
-    custom:    { label: 'Custom',     url: '' },
+    icloud:    { label: 'iCloud',    url: 'https://caldav.icloud.com/' },
+    fastmail:  { label: 'Fastmail',  url: 'https://caldav.fastmail.com/dav/' },
+    radicale:  { label: 'Radicale',  url: 'http://localhost:5232/' },
+    nextcloud: { label: 'Nextcloud', url: '' },
+    custom:    { label: 'Custom',    url: '' },
   };
 
   async function showCalDavForm(editId) {
@@ -3339,10 +3338,23 @@ async function initUnifiedIntegrations() {
     el('uf-caldav-cancel').addEventListener('click', () => { formEl.style.display = 'none'; });
 
     const _runCalDavTest = async () => {
+      const pw = el('uf-caldav-pass').value;
+      // When editing without re-entering a password, use the stored credentials
+      // via the per-account test endpoint to avoid sending a blank password.
+      if (isEdit && !pw) {
+        try {
+          const r = await fetch(`/api/calendar/accounts/${editId}/test`, {
+            method: 'POST', credentials: 'same-origin',
+          });
+          return await r.json();
+        } catch (e) {
+          return { ok: false, error: 'Network error: ' + e.message };
+        }
+      }
       const body = {
         url: el('uf-caldav-url').value.trim(),
         username: el('uf-caldav-user').value.trim(),
-        password: el('uf-caldav-pass').value,
+        password: pw,
       };
       try {
         const r = await fetch('/api/calendar/test', {

@@ -1522,6 +1522,7 @@ def init_db():
     _migrate_add_calendar_metadata()
     _migrate_add_calendar_is_utc()
     _migrate_add_caldav_account_id()
+    _migrate_clear_legacy_caldav_data()
     _migrate_encrypt_email_passwords()
     _migrate_encrypt_signatures()
     _migrate_encrypt_endpoint_keys()
@@ -1657,6 +1658,37 @@ def _migrate_add_caldav_account_id():
         conn.close()
     except Exception as e:
         logging.getLogger(__name__).warning(f"caldav account_id migration failed: {e}")
+
+
+def _migrate_clear_legacy_caldav_data():
+    """One-time wipe of CalDAV rows that used the old URL-only calendar ID.
+    Guards on NULL account_id so it only runs once; CalDAV data re-syncs
+    automatically on next calendar open."""
+    import sqlite3
+    db_path = DATABASE_URL.replace("sqlite:///", "").replace("sqlite://", "")
+    if not os.path.exists(db_path):
+        return
+    try:
+        conn = sqlite3.connect(db_path)
+        row = conn.execute(
+            "SELECT COUNT(*) FROM calendars WHERE source='caldav' AND account_id IS NULL"
+        ).fetchone()
+        if row and row[0] > 0:
+            conn.execute(
+                "DELETE FROM calendar_events WHERE calendar_id IN "
+                "(SELECT id FROM calendars WHERE source='caldav' AND account_id IS NULL)"
+            )
+            conn.execute(
+                "DELETE FROM calendars WHERE source='caldav' AND account_id IS NULL"
+            )
+            conn.commit()
+            logging.getLogger(__name__).info(
+                "Migrated: cleared %d legacy caldav calendar(s) for re-sync with "
+                "account-scoped IDs", row[0]
+            )
+        conn.close()
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"caldav legacy data clear failed: {e}")
 
 
 def _migrate_add_calendar_metadata():

@@ -37,10 +37,12 @@ _LOOKBACK_DAYS = 90
 _LOOKAHEAD_DAYS = 365
 
 
-def _stable_cal_id(remote_url: str) -> str:
-    """Deterministic local id for a remote CalDAV calendar — same URL
-    always maps to the same local row across restarts and re-syncs."""
-    h = hashlib.sha256(remote_url.encode("utf-8")).hexdigest()[:24]
+def _stable_cal_id(remote_url: str, account_id: str = "") -> str:
+    """Deterministic local id for a remote CalDAV calendar.
+    Includes account_id so two accounts pointing at the same server
+    get distinct local rows and never overwrite each other."""
+    key = f"{account_id}::{remote_url}"
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
     return f"caldav-{h}"
 
 
@@ -102,7 +104,7 @@ def _sync_blocking(owner: str, url: str, username: str, password: str, account_i
         for remote_cal in calendars:
             try:
                 remote_url = str(remote_cal.url)
-                cal_id = _stable_cal_id(remote_url)
+                cal_id = _stable_cal_id(remote_url, account_id)
                 display_name = (remote_cal.name or "").strip() or "CalDAV"
 
                 local_cal = db.query(CalendarCal).filter(
@@ -158,7 +160,8 @@ def _sync_blocking(owner: str, url: str, username: str, password: str, account_i
                     for comp in ical.walk():
                         if comp.name != "VEVENT":
                             continue
-                        uid_val = str(comp.get("uid", "")) or str(uuid.uuid4())
+                        remote_uid = str(comp.get("uid", "")) or str(uuid.uuid4())
+                        uid_val = f"{cal_id}::{remote_uid}"
                         seen_uids.add(uid_val)
 
                         dtstart_p = comp.get("dtstart")
@@ -193,6 +196,7 @@ def _sync_blocking(owner: str, url: str, username: str, password: str, account_i
 
                         existing = pending.get(uid_val) or db.query(CalendarEvent).filter(
                             CalendarEvent.uid == uid_val,
+                            CalendarEvent.calendar_id == local_cal.id,
                         ).first()
                         if existing:
                             existing.calendar_id = local_cal.id
