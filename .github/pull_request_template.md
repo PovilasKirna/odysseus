@@ -1,23 +1,38 @@
-## What does this PR do?
+## Summary
 
-<!-- One paragraph. What changed and why. If this closes an issue, say so here. -->
+<!-- One paragraph: what changed and why. "Fixed bug" and "Added feature" are not summaries. -->
 
-Closes #
+## Linked Issue
 
-## Type of change
+<!-- Every PR should be linked to an issue.
+     Use one of:  Fixes #NNN  |  Part of #NNN  |  Closes #NNN  -->
 
-- [ ] Bug fix
-- [ ] New feature
-- [ ] Refactor / cleanup
+Fixes #
+
+## Type of Change
+
+- [ ] Bug fix (non-breaking — fixes a confirmed issue)
+- [ ] New feature (non-breaking — adds new behaviour)
+- [ ] Breaking change (changes or removes existing behaviour)
+- [ ] Refactor / cleanup (behaviour unchanged)
 - [ ] Documentation only
-- [ ] Tooling / CI
+- [ ] CI / tooling / configuration
 
 ## Checklist
 
+- [ ] I searched [open issues](https://github.com/pewdiepie-archdaemon/odysseus/issues) and [open PRs](https://github.com/pewdiepie-archdaemon/odysseus/pulls) — this is not a duplicate.
 - [ ] This PR targets `main`
-- [ ] This PR does **one thing** — no mixed refactor + feature in the same PR
-- [ ] No `print()` in Python — use `logging.getLogger(__name__)`
+- [ ] My changes are limited to the scope described above — no unrelated refactors or whitespace changes mixed in.
 
-## How was this tested?
+## How to Test
 
-<!-- Describe what you ran. Paste relevant output or a screenshot. "It works on my machine" is not a test plan. -->
+<!-- Step-by-step instructions a reviewer can follow to verify this works.
+     Do not leave this empty — a PR without test steps will be sent back. -->
+
+1.
+2.
+3.
+
+## Screenshots (UI changes only)
+
+<!-- Drag and drop images or a screen recording here. Delete this section if not a UI change. -->
