@@ -27,4 +27,4 @@ The frontend needs a component library. The choice determines how much flexibili
 - Updating a component runs `pnpm dlx shadcn@latest add <component>` — the diff is visible and reviewable
 - No version lock-in: if shadcn changes direction, we own the code and can fork at any point
 - Odysseus's existing color themes (red, purple, blue accent variants) map directly onto shadcn's CSS custom property token system via `data-theme` on `<html>` — see architecture doc for the migration approach
-- **Do not edit files in `src/components/ui/` directly.** Use `shadcn add` to update. Custom changes in that directory will be overwritten on the next update.
+- **Do not edit files in `src/components/ui/` directly.** Use `shadcn add` to update. If a component genuinely needs a one-off customisation that shadcn's API does not support, create a wrapper: `src/components/[ComponentName].tsx` that imports from `ui/` and adds the custom behaviour. Document the override and its reason in the domain `CONTEXT.md` so the next contributor knows not to flatten it — and so a `shadcn add` update does not silently overwrite something intentional.
