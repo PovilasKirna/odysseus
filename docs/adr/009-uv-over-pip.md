@@ -11,6 +11,8 @@ Replace `requirements.txt` and pip with `uv` and `pyproject.toml` as the Python 
 
 The current setup uses `requirements.txt` with pip. This has no lockfile, no dev dependency separation, no reproducible installs, and no standard place for tool configuration (ruff, pytest, basedpyright). As the contributor count grows, "it works on my machine" dependency issues become increasingly common. A lockfile is the minimum bar for a project expecting many contributors.
 
+Beyond `requirements.txt`, the project has a second reproducibility gap: runtime package fetches. Cookbook installs packages via `pip` on demand, and MCP configurations reference `@playwright/mcp@latest` and similar floating specs. These bypass the lockfile entirely — a reproducible install step is undermined if code is also fetched at execution time outside the reviewed dependency tree.
+
 ## Alternatives considered
 
 | Option | Why rejected |
@@ -29,3 +31,4 @@ The current setup uses `requirements.txt` with pip. This has no lockfile, no dev
 - `uv.lock` must be committed and must not be hand-edited
 - The migration is a one-time formatting-only commit: `uv init`, copy deps from `requirements.txt`, run `uv lock` — no behavior change
 - Docker images install via `uv sync --no-dev` in the production layer
+- Runtime package specs that are fetched on demand (Cookbook `pip` installs, MCP `npx` calls such as `@playwright/mcp@latest`) must also pin to exact versions — the reproducibility guarantee only holds if dynamic installs are equally deterministic; `@latest` and floating ranges are not permitted in any install path
