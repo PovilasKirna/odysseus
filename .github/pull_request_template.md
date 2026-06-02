@@ -16,7 +16,6 @@ Closes #
 
 - [ ] This PR targets `main`
 - [ ] This PR does **one thing** — no mixed refactor + feature in the same PR
-- [ ] CI is green before requesting review
 - [ ] No `print()` in Python — use `logging.getLogger(__name__)`
 
 ## How was this tested?
