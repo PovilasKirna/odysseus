@@ -28,6 +28,7 @@ Conventional Commits is adopted alongside the branching strategy because it is a
 ## Consequences
 
 - All feature and fix PRs target `dev`, not `main`
+- `main` represents a known-stable, releasable state — every commit on `main` must be safe to hand to a user as the current stable version. Tags cut from `main` are the canonical reference points for release notes and version numbers. Users who want stability should always be pointed at a `main` tag, not `dev`.
 - `main` only receives merges from `dev` — typically when the maintainer decides a batch of changes is stable enough to ship
 - Branch protection on `dev`: CI must be green and at least one review required before merge
 - Branch protection on `main`: only `dev` can be merged in; no direct pushes
