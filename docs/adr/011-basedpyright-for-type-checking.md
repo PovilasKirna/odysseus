@@ -34,3 +34,4 @@ The standard Microsoft tool for Python type checking is Pylance, which powers VS
   ```
 - `typeCheckingMode = "standard"` is intentionally not `"strict"` — the existing codebase has many untyped functions and adding strict mode would produce thousands of errors. Standard mode catches the real bugs without drowning contributors in noise. Tighten incrementally as coverage improves.
 - Initial run will surface existing type errors — these should be fixed in a separate PR, not mixed with the tooling setup commit
+- **Abandonment risk:** basedpyright is a community fork of Microsoft's pyright. If the project is abandoned, the fallback is pyright directly — the CLI flags, `pyproject.toml` config keys, and type inference behaviour are compatible. The migration is a one-line change (`basedpyright` → `pyright` in CI and `pyproject.toml`). This risk is low given the fork's active maintenance, but worth acknowledging.
