@@ -19,7 +19,7 @@ jobs:
     # Skip bots — they open PRs programmatically and have their own process.
     if: github.event.pull_request.user.type != 'Bot'
     steps:
-      - uses: actions/github-script@v7
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         with:
           script: |
             const body    = context.payload.pull_request.body || '';
