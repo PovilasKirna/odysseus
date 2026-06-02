@@ -1,0 +1,70 @@
+name: Triage
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  issues: write
+  pull-requests: write
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const isIssue = !!context.payload.issue;
+            const item = isIssue ? context.payload.issue : context.payload.pull_request;
+            const author = item.user.login;
+            const body = (item.body || '').trim();
+
+            // --- Account age check ---
+            const { data: user } = await github.rest.users.getByUsername({ username: author });
+            const accountAgeDays = (Date.now() - new Date(user.created_at).getTime()) / 86_400_000;
+
+            if (accountAgeDays < 7) {
+              const message = [
+                `Hi @${author}, thanks for the report.`,
+                '',
+                'Automated spam prevention: this project requires a GitHub account at least **7 days old** to open issues and pull requests.',
+                'Your account was created less than 7 days ago, so this has been closed automatically.',
+                '',
+                'If you believe this is a mistake, wait a few days and reopen.',
+              ].join('\n');
+
+              if (isIssue) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: item.number, body: message });
+                await github.rest.issues.update({ ...context.repo, issue_number: item.number, state: 'closed', state_reason: 'not_planned' });
+              } else {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: item.number, body: message });
+                await github.rest.pulls.update({ ...context.repo, pull_number: item.number, state: 'closed' });
+              }
+              return;
+            }
+
+            // --- Empty or placeholder body check ---
+            const isEmptyBody =
+              !body ||
+              body.length < 50 ||
+              /^(\s*<!-.*?-->\s*)+$/s.test(body);  // body is only HTML comments (unfilled template)
+
+            if (isEmptyBody) {
+              const itemType = isIssue ? 'issue' : 'pull request';
+              const message = [
+                `Hi @${author}, this ${itemType} was closed because the description is empty or contains only the template placeholder text.`,
+                '',
+                `Please reopen with a complete description. For ${isIssue ? 'bugs and feature requests' : 'pull requests'}, follow the template — every required field must be filled in.`,
+              ].join('\n');
+
+              if (isIssue) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: item.number, body: message });
+                await github.rest.issues.update({ ...context.repo, issue_number: item.number, state: 'closed', state_reason: 'not_planned' });
+              } else {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: item.number, body: message });
+                await github.rest.pulls.update({ ...context.repo, pull_number: item.number, state: 'closed' });
+              }
+            }

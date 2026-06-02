@@ -1,0 +1,51 @@
+name: Feature Request
+description: Propose a new feature or behaviour change.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature requests that duplicate something already in [ROADMAP.md](https://github.com/pewdiepie-archdaemon/odysseus/blob/main/ROADMAP.md) or an existing open issue will be closed as duplicates. Check first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the problem or gap. What can you not do today that you want to be able to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like to see added or changed? Be specific about behaviour, not just intent.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What other approaches did you think about? Why is your proposed solution better?
+
+  - type: dropdown
+    id: willing_to_implement
+    attributes:
+      label: Are you willing to implement this?
+      options:
+        - "Yes — I can open a PR"
+        - "Partially — I can help but need guidance"
+        - "No — I am only filing the request"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I checked ROADMAP.md and existing issues — this is not already tracked.
+          required: true
+        - label: This is a focused request for one feature, not a bundle of multiple ideas.
+          required: true

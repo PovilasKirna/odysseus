@@ -1,0 +1,58 @@
+name: Bug Report
+description: Something is broken or behaving unexpectedly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before opening a bug report, check the [existing issues](https://github.com/pewdiepie-archdaemon/odysseus/issues) and [discussions](https://github.com/pewdiepie-archdaemon/odysseus/discussions) to see if it has already been reported. Generic "it doesn't work" reports without reproduction steps will be closed without comment.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug. What did you expect to happen? What actually happened?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Exact steps someone else can follow to hit this bug.
+      placeholder: |
+        1. Go to ...
+        2. Click on ...
+        3. See error
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: How are you running Odysseus?
+      placeholder: |
+        - Install method: Docker / native Python / WSL
+        - OS: Ubuntu 24.04 / macOS 15 / Windows 11
+        - Python version: 3.12
+        - Browser: Chrome 125
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or error output
+      description: Paste any relevant terminal output, stack traces, or browser console errors. Use code blocks.
+      render: shell
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues and this is not a duplicate.
+          required: true
+        - label: I included enough information for someone else to reproduce this.
+          required: true
