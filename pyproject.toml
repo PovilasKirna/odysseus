@@ -1,3 +1,72 @@
+[project]
+name = "odysseus"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "python-multipart",
+    "python-dotenv",
+    "httpx",
+    "pydantic>=2.0",
+    "pydantic-settings>=2.0",
+    "SQLAlchemy",
+    "pypdf",
+    "beautifulsoup4",
+    "charset-normalizer",
+    "numpy",
+    # ChromaDB HTTP client + local ONNX embeddings for RAG, semantic memory,
+    # and tool selection. Core agent paths — degrades to keyword fallback if missing.
+    "chromadb-client",
+    "fastembed",
+    "youtube-transcript-api",
+    # Markdown rendering for research reports.
+    "markdown",
+    # Calendar .ics import/export.
+    "icalendar",
+    # Recurrence rule expansion (dateutil.rrule) — explicit even though caldav pulls it in.
+    "python-dateutil",
+    "caldav",
+    "cryptography",
+    "bcrypt",
+    "mcp",
+    "pyotp",
+    "qrcode[pil]",
+    "croniter",
+]
+
+[project.optional-dependencies]
+# Local speech-to-text via faster-whisper (CPU by default, GPU if torch is present).
+whisper = ["faster-whisper"]
+# DuckDuckGo search provider.
+ddg = ["duckduckgo-search"]
+# PDF form-filling (AGPL-3.0 — see ACKNOWLEDGMENTS.md).
+pdf-forms = ["PyMuPDF"]
+# Office/EPUB document text extraction for chat attachments and the RAG index.
+office = ["markitdown[docx,pptx,xlsx,xls]==0.1.5"]
+
+[dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+    "ruff",
+    "basedpyright",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["services", "core", "routes", "src", "config"]
+
+[tool.basedpyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
