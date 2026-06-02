@@ -26,9 +26,10 @@ As Odysseus grows, AI-assisted contributors will be a significant part of the co
 
 ## Consequences
 
-- `AGENTS.md` at the root stays short (~30 lines) — project overview, pointer map to domain CONTEXT.md files, 3–5 global rules, and a pointer to `docs/adr/`
-- Each domain (`backend/`, `frontend/`, `services/calendar/`, etc.) has its own `CONTEXT.md` describing how that area works and what the rules are
-- `docs/adr/` records why decisions were made — CONTEXT.md files link to relevant ADRs so readers can follow the reasoning
-- An agent working on a calendar bug reads `AGENTS.md` + `services/calendar/CONTEXT.md` only — irrelevant domains never load
+- `AGENTS.md` at the root stays short (~30 lines) — project overview, pointer map to domain `CONTEXT.md` files, 3–5 global rules, and a pointer to `docs/adr/`
+- Each backend domain (`core/`, `routes/`, `services/`, `src/`) gets its own `CONTEXT.md` describing how that area works and what the rules are; the frontend gets one once the frontend rewrite is accepted
+- `docs/adr/` records why decisions were made — `CONTEXT.md` files link to relevant ADRs so readers can follow the reasoning
+- An agent working on a calendar bug reads `AGENTS.md` + `services/CONTEXT.md` — irrelevant domains never load
 - ADRs are immutable once accepted — if a decision changes, a new ADR supersedes the old one. This prevents silent reversal of intentional choices
-- CI enforcement of CONTEXT.md presence (e.g. fail if a new service directory is added without one) is optional — start as convention, add enforcement if drift becomes a problem
+- **Note:** This ADR references the current directory structure (`core/`, `routes/`, `services/`, `src/`). The domain layout will expand as the codebase evolves — CONTEXT.md files should be added alongside any new service or major subdirectory, not retroactively as a batch
+- CI enforcement of `CONTEXT.md` presence (e.g. fail if a new service directory is added without one) is optional — start as convention, add enforcement if drift becomes a problem
