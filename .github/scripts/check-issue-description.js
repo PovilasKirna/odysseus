@@ -100,9 +100,13 @@ module.exports = async ({ github, context, core }) => {
   const PLACEHOLDER = '-- Please Select --';
   const headingRe = /^#+\s+(.+?)\s*$/gm;
   const headings = [];
-  let hm;
-  while ((hm = headingRe.exec(body)) !== null) {
-    headings.push({ name: hm[1].trim(), headStart: hm.index, contentStart: hm.index + hm[0].length });
+  let headingMatch;
+  while ((headingMatch = headingRe.exec(body)) !== null) {
+    headings.push({
+      name: headingMatch[1].trim(),
+      headStart: headingMatch.index,
+      contentStart: headingMatch.index + headingMatch[0].length,
+    });
   }
   const unfilled = [];
   for (let i = 0; i < headings.length; i++) {
