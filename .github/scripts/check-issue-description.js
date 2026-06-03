@@ -16,7 +16,7 @@ module.exports = async ({ github, context, core }) => {
   // depth (#, ##, ###, …) so a manually-written body isn't penalised for
   // using a different number of hashes than the issue form generates.
   function section(heading) {
-    const re = new RegExp(`#+\\s+${heading}\\s*([\\s\\S]*?)(?=\\n#+\\s+|$)`);
+    const re = new RegExp(`#+\\s+${heading}\\s*([\\s\\S]*?)(?=\\n#+\\s+|$)`, 'i');
     const m  = body.match(re);
     return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').trim() : '';
   }
