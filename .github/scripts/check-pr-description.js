@@ -1,8 +1,8 @@
 // @ts-check
 'use strict';
 
-/** @param {{ github: import('@octokit/rest').Octokit, context: import('@actions/github').context }} */
-module.exports = async ({ github, context }) => {
+/** @param {{ github: import('@octokit/rest').Octokit, context: import('@actions/github').context, core: import('@actions/core') }} */
+module.exports = async ({ github, context, core }) => {
   const body   = context.payload.pull_request.body || '';
   const prNum  = context.payload.pull_request.number;
   const MARKER = '<!-- pr-description-check-bot -->';
@@ -57,7 +57,6 @@ module.exports = async ({ github, context }) => {
   const existing = comments.find(c => (c.body ?? '').includes(MARKER));
 
   if (problems.length === 0) {
-    // Green pipeline is the signal — no success comment needed. Clean up any prior failure comment.
     if (existing) {
       await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
     }
@@ -87,6 +86,7 @@ module.exports = async ({ github, context }) => {
       await github.rest.issues.createLabel({ owner, repo, name, color, description });
     } catch (e) {
       if (e.status !== 422) throw e;
+      await github.rest.issues.updateLabel({ owner, repo, name, color, description });
     }
   }
 
@@ -110,5 +110,6 @@ module.exports = async ({ github, context }) => {
       { name: 'needs work', color: 'd93f0b', description: 'PR description incomplete — please update before review' },
       'ready for review',
     );
+    core.setFailed(`PR description has ${problems.length} issue(s) — see bot comment for details.`);
   }
 };
