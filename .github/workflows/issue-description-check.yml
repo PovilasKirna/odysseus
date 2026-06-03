@@ -1,0 +1,154 @@
+name: ci / issue description check
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  issues: write
+
+jobs:
+  check:
+    name: Check issue description
+    runs-on: ubuntu-latest
+    # Skip bots (Dependabot, release-drafter, etc.)
+    if: ${{ github.event.issue.user.type != 'Bot' }}
+    steps:
+      - name: Validate and label
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const issue  = context.payload.issue;
+            const body   = (issue.body || '').trim();
+            const labels = issue.labels.map(l => l.name);
+
+            const isBug     = labels.includes('bug');
+            const isFeature = labels.includes('enhancement');
+
+            // ── Helper: extract a section's text, stripping HTML comments ──
+            function section(text, heading) {
+              const re = new RegExp(`### ${heading}\\s*([\\s\\S]*?)(?=\\n###|$)`);
+              const m  = text.match(re);
+              return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').trim() : '';
+            }
+
+            const failures = [];
+
+            // ── Common: body must exist ─────────────────────────────────────
+            if (body.length < 50) {
+              failures.push(
+                '**Description** — body is empty or too short. ' +
+                'Please open the issue using one of the provided templates.'
+              );
+            }
+
+            // ── Bug-specific ────────────────────────────────────────────────
+            if (isBug) {
+              const stepsText = section(body, 'Steps to Reproduce');
+              if (!stepsText || !/\d+\.|[-*]/.test(stepsText)) {
+                failures.push(
+                  '**Steps to Reproduce** — must include at least one numbered or bulleted step'
+                );
+              }
+
+              if (section(body, 'Expected Behaviour').length < 10) {
+                failures.push('**Expected Behaviour** — section is empty or too short');
+              }
+
+              if (section(body, 'Actual Behaviour').length < 10) {
+                failures.push('**Actual Behaviour** — section is empty or too short');
+              }
+            }
+
+            // ── Feature-specific ────────────────────────────────────────────
+            if (isFeature) {
+              if (section(body, 'Problem or Motivation').length < 20) {
+                failures.push(
+                  '**Problem or Motivation** — section is empty or too short ' +
+                  '(explain the concrete problem this solves)'
+                );
+              }
+
+              if (section(body, 'Proposed Solution').length < 20) {
+                failures.push(
+                  '**Proposed Solution** — section is empty or too short ' +
+                  '(describe the change you want to see)'
+                );
+              }
+            }
+
+            // ── Find existing bot comment to update in-place ────────────────
+            const MARKER = '<!-- issue-description-check -->';
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo:  context.repo.repo,
+              issue_number: issue.number,
+            });
+            const existing = comments.find(
+              c => c.user.type === 'Bot' && c.body.includes(MARKER)
+            );
+
+            const LABEL_BAD  = 'needs more info';
+            const LABEL_GOOD = 'ready for review';
+
+            let commentBody;
+
+            if (failures.length === 0) {
+              commentBody = [
+                MARKER,
+                '✅ **Issue description looks complete** — all required sections are present.',
+                '',
+                'Thank you for following the template!',
+              ].join('\n');
+
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issue.number, name: LABEL_BAD,
+                });
+              } catch (_) { /* label may not be applied */ }
+
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issue.number, labels: [LABEL_GOOD],
+                });
+              } catch (_) { /* label may not exist yet */ }
+
+            } else {
+              const list = failures.map(f => `- ${f}`).join('\n');
+              commentBody = [
+                MARKER,
+                '⚠️ **Issue description is incomplete.** Please update the following sections:',
+                '',
+                list,
+                '',
+                '_This comment updates automatically when you edit the issue._',
+              ].join('\n');
+
+              try {
+                await github.rest.issues.removeLabel({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issue.number, name: LABEL_GOOD,
+                });
+              } catch (_) { /* label may not be applied */ }
+
+              try {
+                await github.rest.issues.addLabels({
+                  owner: context.repo.owner, repo: context.repo.repo,
+                  issue_number: issue.number, labels: [LABEL_BAD],
+                });
+              } catch (_) { /* label may not exist yet */ }
+            }
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                comment_id: existing.id, body: commentBody,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner, repo: context.repo.repo,
+                issue_number: issue.number, body: commentBody,
+              });
+            }
