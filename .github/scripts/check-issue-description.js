@@ -12,9 +12,11 @@ module.exports = async ({ github, context, core }) => {
   const isBug     = labels.includes('bug');
   const isFeature = labels.includes('enhancement');
 
-  // Extract a ### Section's text, stripping HTML comments.
+  // Extract a Section's text, stripping HTML comments. Matches any heading
+  // depth (#, ##, ###, …) so a manually-written body isn't penalised for
+  // using a different number of hashes than the issue form generates.
   function section(heading) {
-    const re = new RegExp(`### ${heading}\\s*([\\s\\S]*?)(?=\\n###|$)`);
+    const re = new RegExp(`#+\\s+${heading}\\s*([\\s\\S]*?)(?=\\n#+\\s|$)`, 'i');
     const m  = body.match(re);
     return m ? m[1].replace(/<!--[\s\S]*?-->/g, '').trim() : '';
   }
@@ -29,54 +31,64 @@ module.exports = async ({ github, context, core }) => {
     );
   }
 
-  // ── Label conflict ────────────────────────────────────────────────────────
-  if (isBug && isFeature) {
-    failures.push('**Labels** — an issue cannot be both `bug` and `enhancement`. Remove one label.');
-  } else if (isBug) {
-    // ── Bug-specific ────────────────────────────────────────────────────────
-    if (!section('Install Method')) {
-      failures.push('**Install Method** — select how you installed Odysseus');
+  // An issue is one or the other — never both. Resolve to a single type so the
+  // validation can't run two conflicting blocks at once.
+  const type = isBug && isFeature ? 'conflict' : isBug ? 'bug' : isFeature ? 'feature' : 'untyped';
+
+  switch (type) {
+    case 'conflict':
+      failures.push('**Labels** — an issue cannot be both `bug` and `enhancement`. Remove one label.');
+      break;
+
+    case 'bug': {
+      if (!section('Install Method')) {
+        failures.push('**Install Method** — select how you installed Odysseus');
+      }
+
+      if (!section('Operating System')) {
+        failures.push('**Operating System** — select your OS');
+      }
+
+      const stepsText = section('Steps to Reproduce');
+      if (!stepsText || !/\d+\.|[-*]/.test(stepsText)) {
+        failures.push('**Steps to Reproduce** — must include at least one numbered or bulleted step');
+      }
+
+      if (section('Expected Behaviour').length < 10) {
+        failures.push('**Expected Behaviour** — section is empty or too short');
+      }
+
+      if (section('Actual Behaviour').length < 10) {
+        failures.push('**Actual Behaviour** — section is empty or too short');
+      }
+      break;
     }
 
-    if (!section('Operating System')) {
-      failures.push('**Operating System** — select your OS');
-    }
+    case 'feature':
+      if (!section('Area')) {
+        failures.push('**Area** — select which part of the application this affects');
+      }
 
-    const stepsText = section('Steps to Reproduce');
-    if (!stepsText || !/\d+\.|[-*]/.test(stepsText)) {
-      failures.push('**Steps to Reproduce** — must include at least one numbered or bulleted step');
-    }
+      if (section('Problem or Motivation').length < 20) {
+        failures.push(
+          '**Problem or Motivation** — section is empty or too short ' +
+          '(explain the concrete problem this solves)',
+        );
+      }
 
-    if (section('Expected Behaviour').length < 10) {
-      failures.push('**Expected Behaviour** — section is empty or too short');
-    }
+      if (section('Proposed Solution').length < 20) {
+        failures.push(
+          '**Proposed Solution** — section is empty or too short ' +
+          '(describe the change you want to see)',
+        );
+      }
 
-    if (section('Actual Behaviour').length < 10) {
-      failures.push('**Actual Behaviour** — section is empty or too short');
-    }
-  } else if (isFeature) {
-    // ── Feature-specific ────────────────────────────────────────────────────
-    if (!section('Area')) {
-      failures.push('**Area** — select which part of the application this affects');
-    }
+      if (!section('Are you willing to implement this\\?')) {
+        failures.push('**Are you willing to implement this?** — select an option');
+      }
+      break;
 
-    if (section('Problem or Motivation').length < 20) {
-      failures.push(
-        '**Problem or Motivation** — section is empty or too short ' +
-        '(explain the concrete problem this solves)',
-      );
-    }
-
-    if (section('Proposed Solution').length < 20) {
-      failures.push(
-        '**Proposed Solution** — section is empty or too short ' +
-        '(describe the change you want to see)',
-      );
-    }
-
-    if (!section('Are you willing to implement this\\?')) {
-      failures.push('**Are you willing to implement this?** — select an option');
-    }
+    // 'untyped' → only the common body-length check applies.
   }
 
   // ── Labels ────────────────────────────────────────────────────────────────
