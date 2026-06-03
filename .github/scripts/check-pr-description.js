@@ -14,10 +14,11 @@ module.exports = async ({ github, context, core }) => {
     return (text ?? '').replace(/<!--[\s\S]*?-->/g, '').trim();
   }
 
-  // Extract the text content of a ## Section.
+  // Extract the text content of a Section. Matches any heading depth (#, ##,
+  // ###, …) so the check doesn't break if the template's heading level changes.
   function section(heading) {
-    const m = body.match(new RegExp(`##\\s+${heading}[\\s\\S]*?(?=\\n##\\s|$)`, 'i'));
-    return strip(m?.[0].replace(new RegExp(`##\\s+${heading}`, 'i'), '') ?? '');
+    const m = body.match(new RegExp(`#+\\s+${heading}[\\s\\S]*?(?=\\n#+\\s+|$)`, 'i'));
+    return strip(m?.[0].replace(new RegExp(`#+\\s+${heading}`, 'i'), '') ?? '');
   }
 
   const problems = [];
