@@ -37,6 +37,3 @@ mcp
 pyotp
 qrcode[pil]
 croniter
-pytest
-pytest-asyncio
-pre-commit
