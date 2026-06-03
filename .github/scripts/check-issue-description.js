@@ -93,13 +93,24 @@ module.exports = async ({ github, context, core }) => {
 
   // ── Labels ────────────────────────────────────────────────────────────────
   // These labels are expected to already exist in the repo — managing the
-  // repo's label set is the maintainer's job, not this workflow's. We only
-  // apply/remove by name and fail soft if a label is missing or renamed.
-  async function addLabel(name) {
+  // repo's label set is the maintainer's job, not this workflow's. We check a
+  // label exists before applying it (issues.addLabels would otherwise silently
+  // create a missing label) and fail soft — warn and skip — if it's absent.
+  async function labelExists(name) {
     try {
-      await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [name] });
+      await github.rest.issues.getLabel({ owner, repo, name });
+      return true;
     } catch (e) {
-      core.warning(`Could not apply label "${name}" — is it present in the repo? (status ${e.status})`);
+      if (e.status === 404) return false;
+      throw e;
+    }
+  }
+
+  async function addLabel(name) {
+    if (await labelExists(name)) {
+      await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [name] });
+    } else {
+      core.warning(`Label "${name}" does not exist in the repo — skipping. Create it once to enable labelling.`);
     }
   }
 
