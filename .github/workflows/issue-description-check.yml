@@ -44,6 +44,14 @@ jobs:
 
             // ── Bug-specific ────────────────────────────────────────────────
             if (isBug) {
+              if (!section(body, 'Install Method')) {
+                failures.push('**Install Method** — select how you installed Odysseus');
+              }
+
+              if (!section(body, 'Operating System')) {
+                failures.push('**Operating System** — select your OS');
+              }
+
               const stepsText = section(body, 'Steps to Reproduce');
               if (!stepsText || !/\d+\.|[-*]/.test(stepsText)) {
                 failures.push(
@@ -62,6 +70,10 @@ jobs:
 
             // ── Feature-specific ────────────────────────────────────────────
             if (isFeature) {
+              if (!section(body, 'Area')) {
+                failures.push('**Area** — select which part of the application this affects');
+              }
+
               if (section(body, 'Problem or Motivation').length < 20) {
                 failures.push(
                   '**Problem or Motivation** — section is empty or too short ' +
@@ -74,6 +86,10 @@ jobs:
                   '**Proposed Solution** — section is empty or too short ' +
                   '(describe the change you want to see)'
                 );
+              }
+
+              if (!section(body, 'Are you willing to implement this\\?')) {
+                failures.push('**Are you willing to implement this?** — select an option');
               }
             }
 

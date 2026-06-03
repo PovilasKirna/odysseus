@@ -46,18 +46,29 @@ jobs:
               problems.push('**Summary** is empty or too short — describe what changed and why.');
             }
 
-            // 2. At least one Type of Change box must be checked.
+            // 2. Linked Issue must reference a real issue number.
+            const linkedSection = section('Linked Issue');
+            if (!linkedSection || !/(?:fixes|part of|closes|resolves)\s*#\d+/i.test(linkedSection)) {
+              problems.push('**Linked Issue** — add a reference like `Fixes #NNN`, `Part of #NNN`, or `Closes #NNN`.');
+            }
+
+            // 3. At least one Type of Change box must be checked.
             const typeBlock = body.match(/##\s+Type of Change[\s\S]*?(?=\n##\s|$)/i)?.[0] ?? '';
             if (!/- \[x\]/i.test(typeBlock)) {
               problems.push('**Type of Change** — check at least one box.');
             }
 
-            // 3. Duplicate-search checklist item must be checked.
+            // 4. Duplicate-search checklist item must be checked.
             if (!/- \[x\] I searched/i.test(body)) {
               problems.push('**Checklist** — check the duplicate-search box to confirm you searched existing issues and PRs.');
             }
 
-            // 4. How to Test must have at least one numbered step.
+            // 5. "Actually ran the app" checklist item must be checked.
+            if (!/- \[x\] I actually ran the app/i.test(body)) {
+              problems.push('**Checklist** — check the "I actually ran the app" box. Type-checks and unit tests are not enough.');
+            }
+
+            // 6. How to Test must have at least one numbered step.
             const howTo = section('How to Test');
             if (!howTo || !/\d+\.\s*\S/.test(howTo)) {
               problems.push('**How to Test** — add at least one numbered step a reviewer can follow to verify this works.');
