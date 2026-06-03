@@ -28,10 +28,13 @@ module.exports = async ({ github, context, core }) => {
     problems.push('**Summary** is empty or too short — describe what changed and why.');
   }
 
-  // 2. Linked Issue must reference a real issue number.
+  // 2. Linked Issue must reference a real issue. Accept a bare #NNN, a closing
+  //    keyword + #NNN, or a full issue URL (e.g. .../issues/123) — the strict
+  //    keyword-prefixed form previously false-flagged correctly-linked PRs.
   const linkedSection = section('Linked Issue');
-  if (!linkedSection || !/(?:fixes|part of|closes|resolves)\s*#\d+/i.test(linkedSection)) {
-    problems.push('**Linked Issue** — add a reference like `Fixes #NNN`, `Part of #NNN`, or `Closes #NNN`.');
+  const hasIssueRef = /#\d+/.test(linkedSection) || /\/issues\/\d+/.test(linkedSection);
+  if (!linkedSection || !hasIssueRef) {
+    problems.push('**Linked Issue** — add a reference like `Fixes #NNN`, a bare `#NNN`, or a link to the issue.');
   }
 
   // 3. At least one Type of Change box must be checked.
