@@ -92,12 +92,22 @@ module.exports = async ({ github, context, core }) => {
   }
 
   // ── Labels ────────────────────────────────────────────────────────────────
-  async function ensureLabel(name, color, description) {
+  // These labels are expected to already exist in the repo — managing the
+  // repo's label set is the maintainer's job, not this workflow's. We only
+  // apply/remove by name and fail soft if a label is missing or renamed.
+  async function addLabel(name) {
     try {
-      await github.rest.issues.createLabel({ owner, repo, name, color, description });
+      await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [name] });
     } catch (e) {
-      if (e.status !== 422) throw e;
-      await github.rest.issues.updateLabel({ owner, repo, name, color, description });
+      core.warning(`Could not apply label "${name}" — is it present in the repo? (status ${e.status})`);
+    }
+  }
+
+  async function dropLabel(name) {
+    try {
+      await github.rest.issues.removeLabel({ owner, repo, issue_number: issue.number, name });
+    } catch (e) {
+      if (e.status !== 404 && e.status !== 410) throw e;
     }
   }
 
@@ -116,12 +126,8 @@ module.exports = async ({ github, context, core }) => {
       await github.rest.issues.deleteComment({ owner, repo, comment_id: existing.id });
     }
 
-    try {
-      await github.rest.issues.removeLabel({ owner, repo, issue_number: issue.number, name: LABEL_BAD });
-    } catch (_) { /* label may not be applied */ }
-
-    await ensureLabel(LABEL_GOOD, '0e8a16', 'Description complete — ready for maintainer review');
-    await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [LABEL_GOOD] });
+    await dropLabel(LABEL_BAD);
+    await addLabel(LABEL_GOOD);
 
   } else {
     const list = failures.map(f => `- ${f}`).join('\n');
@@ -140,12 +146,8 @@ module.exports = async ({ github, context, core }) => {
       await github.rest.issues.createComment({ owner, repo, issue_number: issue.number, body: commentBody });
     }
 
-    try {
-      await github.rest.issues.removeLabel({ owner, repo, issue_number: issue.number, name: LABEL_GOOD });
-    } catch (_) { /* label may not be applied */ }
-
-    await ensureLabel(LABEL_BAD, 'fbca04', 'Issue description incomplete — please provide the missing details');
-    await github.rest.issues.addLabels({ owner, repo, issue_number: issue.number, labels: [LABEL_BAD] });
+    await dropLabel(LABEL_GOOD);
+    await addLabel(LABEL_BAD);
 
     core.setFailed(`Issue description has ${failures.length} issue(s) — see bot comment for details.`);
   }

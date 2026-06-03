@@ -82,18 +82,15 @@ module.exports = async ({ github, context, core }) => {
   }
 
   // ── Labels ────────────────────────────────────────────────────────────────
-  async function ensureLabel(name, color, description) {
-    try {
-      await github.rest.issues.createLabel({ owner, repo, name, color, description });
-    } catch (e) {
-      if (e.status !== 422) throw e;
-      await github.rest.issues.updateLabel({ owner, repo, name, color, description });
-    }
-  }
-
+  // These labels are expected to already exist in the repo — managing the
+  // repo's label set is the maintainer's job, not this workflow's. We only
+  // apply/remove by name and fail soft if a label is missing or renamed.
   async function swapLabel(num, add, remove) {
-    await ensureLabel(add.name, add.color, add.description);
-    await github.rest.issues.addLabels({ owner, repo, issue_number: num, labels: [add.name] });
+    try {
+      await github.rest.issues.addLabels({ owner, repo, issue_number: num, labels: [add] });
+    } catch (e) {
+      core.warning(`Could not apply label "${add}" — is it present in the repo? (status ${e.status})`);
+    }
     try {
       await github.rest.issues.removeLabel({ owner, repo, issue_number: num, name: remove });
     } catch (e) {
@@ -102,15 +99,9 @@ module.exports = async ({ github, context, core }) => {
   }
 
   if (problems.length === 0) {
-    await swapLabel(prNum,
-      { name: 'ready for review', color: '0e8a16', description: 'Description complete — ready for maintainer review' },
-      'needs work',
-    );
+    await swapLabel(prNum, 'ready for review', 'needs work');
   } else {
-    await swapLabel(prNum,
-      { name: 'needs work', color: 'd93f0b', description: 'PR description incomplete — please update before review' },
-      'ready for review',
-    );
+    await swapLabel(prNum, 'needs work', 'ready for review');
     core.setFailed(`PR description has ${problems.length} issue(s) — see bot comment for details.`);
   }
 };
