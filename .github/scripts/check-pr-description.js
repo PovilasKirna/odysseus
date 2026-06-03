@@ -4,6 +4,7 @@
 const { section } = require('./lib/markdown');
 const { swapLabel } = require('./lib/labels');
 const { upsertComment, deleteComment } = require('./lib/comment');
+const { parseTitle, TYPES_SKIP_HOWTO } = require('./lib/pr-type');
 
 const MARKER = '<!-- pr-description-check-bot -->';
 
@@ -13,6 +14,12 @@ module.exports = async ({ github, context, core }) => {
   const prNum  = context.payload.pull_request.number;
   const owner  = context.repo.owner;
   const repo   = context.repo.repo;
+  const labels = (context.payload.pull_request.labels || []).map(l => l.name);
+
+  // PR type drives which checks apply. docs/chore/ci PRs (or anything tagged
+  // `documentation`) don't need a How-to-Test section.
+  const prType   = parseTitle(context.payload.pull_request.title || '')?.type;
+  const skipHowTo = TYPES_SKIP_HOWTO.includes(prType) || labels.includes('documentation');
 
   const problems = [];
 
@@ -44,9 +51,12 @@ module.exports = async ({ github, context, core }) => {
   // 5. How to Test must contain enough real detail for a reviewer to act on.
   //    Any format is fine — numbered steps, prose, the commands you ran, or a
   //    code block — so we only require non-trivial content, not a specific shape.
-  const howTo = section(body, 'How to Test');
-  if (howTo.length < 30) {
-    problems.push('**How to Test** — explain how a reviewer can verify this change. Numbered steps, the commands you ran, or a short code block all work — give a sentence or two of real detail (not just "tested locally").');
+  //    Skipped for docs/chore/ci PRs and anything labelled `documentation`.
+  if (!skipHowTo) {
+    const howTo = section(body, 'How to Test');
+    if (howTo.length < 30) {
+      problems.push('**How to Test** — explain how a reviewer can verify this change. Numbered steps, the commands you ran, or a short code block all work — give a sentence or two of real detail (not just "tested locally").');
+    }
   }
 
   // ── Comment ──────────────────────────────────────────────────────────────
