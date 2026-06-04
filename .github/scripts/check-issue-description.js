@@ -49,9 +49,17 @@ module.exports = async ({ github, context, core }) => {
         failures.push('**Operating System** — select your OS');
       }
 
+      // Any format is fine — numbered steps, a short prose description, or the
+      // commands that trigger the bug. Requiring a numbered/bulleted marker
+      // false-flagged proper reports written as prose, so we only require
+      // non-trivial content, mirroring the PR check's How-to-Test rule.
       const stepsText = section(body, 'Steps to Reproduce');
-      if (!stepsText || !/\d+\.|[-*]/.test(stepsText)) {
-        failures.push('**Steps to Reproduce** — must include at least one numbered or bulleted step');
+      if (stepsText.length < 30) {
+        failures.push(
+          '**Steps to Reproduce** — explain how to trigger the bug. Numbered steps, ' +
+          'a short prose description, or the exact commands you ran all work — give a ' +
+          'sentence or two of real detail.',
+        );
       }
 
       if (section(body, 'Expected Behaviour').length < 10) {
